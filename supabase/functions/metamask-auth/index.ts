@@ -35,12 +35,38 @@ serve(async (req) => {
   }
 
   try {
-    const { action, walletAddress, signature, nonce, loginAs } = await req.json();
+    const { action, walletAddress, signature, nonce, loginAs, intent } = await req.json();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // ──────────────────────────────────────────────
+    // ACTION: check — lightweight wallet existence check
+    // Returns { exists: true | false }
+    // ──────────────────────────────────────────────
+    if (action === "check") {
+      if (!walletAddress) {
+        return new Response(JSON.stringify({ error: "Missing walletAddress" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("wallet_address", walletAddress.toLowerCase())
+        .maybeSingle();
+
+      return new Response(JSON.stringify({ exists: !!existingProfile }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ──────────────────────────────────────────────
+    // ACTION: challenge — generate nonce for signing
+    // ──────────────────────────────────────────────
     if (action === "challenge") {
       // Generate a nonce for the wallet to sign
       const newNonce = generateNonce();
@@ -54,6 +80,11 @@ serve(async (req) => {
       });
     }
 
+    // ──────────────────────────────────────────────
+    // ACTION: verify — validate signature and authenticate
+    // intent: "login"    → reject if wallet NOT registered
+    // intent: "register" → reject if wallet ALREADY registered
+    // ──────────────────────────────────────────────
     if (action === "verify") {
       if (!walletAddress || !signature || !nonce) {
         return new Response(JSON.stringify({ error: "Missing parameters" }), {
@@ -90,6 +121,30 @@ serve(async (req) => {
         .select("user_id, onboarding_complete")
         .eq("wallet_address", addr)
         .maybeSingle();
+
+      // ── Intent enforcement ──────────────────────
+      // "login"    → must already be registered
+      if (intent === "login" && !existingProfile) {
+        return new Response(
+          JSON.stringify({ error: "not_registered", message: "Wallet not registered. Please sign up first." }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      // "register" → must NOT already be registered
+      if (intent === "register" && existingProfile) {
+        return new Response(
+          JSON.stringify({ error: "already_registered", message: "Wallet already registered. Please log in." }),
+          {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      // ────────────────────────────────────────────
 
       let userId: string;
       let isNewUser = false;

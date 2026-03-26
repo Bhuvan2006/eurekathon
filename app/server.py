@@ -6,11 +6,11 @@ import numpy as np
 import os
 import json
 import traceback
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 # Load environment variables from .env file in project root
-import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env_path = os.path.join(project_root, ".env")
 load_dotenv(env_path)
@@ -26,36 +26,23 @@ model = joblib.load(MODEL_PATH)
 app = FastAPI(title="Diabetes Prediction API")
 
 # -----------------------------
-# CORS (allow frontend dev server)
-# -----------------------------
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-import joblib
-import numpy as np
-import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "diabetes_model.pkl")
-model = joblib.load(MODEL_PATH)
-
-app = FastAPI(title="Diabetes Prediction API")
-
-# -----------------------------
 # Allow frontend (React) to call backend
 # -----------------------------
 origins = [
-    "http://localhost:8080",  # your React dev server
-    "http://127.0.0.1:8080",   # sometimes React runs here
-    "http://localhost:8081",  # your React dev server (alternative)
-    "http://127.0.0.1:8081"   # sometimes React runs here
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,        # list of allowed origins
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],          # allow all HTTP methods
-    allow_headers=["*"],          # allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # -----------------------------
@@ -79,72 +66,100 @@ class PredictRequest(BaseModel):
     age: float
 
 # ─────────────────────────────────────────────────────────────
-# AI / LLM Setup  (must be defined BEFORE the /predict route)
+# AI / LLM Setup
 # ─────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    print("[WARNING] GEMINI_API_KEY not set in app/.env — LLM explanations will be disabled")
+    print("[WARNING] GEMINI_API_KEY not set in .env — LLM explanations will be disabled")
 
-genai_model = None
+genai_client = None
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    genai_model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        generation_config={"temperature": 0.2}
-    )
+    genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 SYSTEM_PROMPT = """
-You are a clinical decision support assistant.
+You are a clinical decision support assistant helping clinicians understand a patient's diabetes risk.
 
-You must explain a diabetes risk assessment using ONLY the structured data provided.
+You must explain the diabetes risk assessment using ONLY the structured data provided below.
+
 You are NOT allowed to:
-- Add new risk factors
-- Add medical advice
-- Diagnose disease
+- Add new risk factors not present in the data
+- Provide a definitive medical diagnosis
 - Infer causes not explicitly mentioned
 - Mention model internals or algorithms
 
 You MUST:
-- Use cautious, non-diagnostic language
-- Explain why the risk level was assigned
-- Reference top_factors, pattern_detected, and counterfactual
-- Write for clinicians (clear, concise, neutral tone)
+- Format your entire response as **markdown bullet points** (use `- ` for each point)
+- **Bold** all important medical terms, risk factor names, numeric values, and clinical keywords using `**word**`
+- Use cautious, non-diagnostic clinical language
+- Clearly explain why the assigned risk level was determined
+- Reference the top contributing factors, detected patterns, and the counterfactual insight
+- Write 10-15 bullet points in a clear, accurate, and neutral clinical tone
+- Include evidence-based lifestyle factors (e.g. diet, physical activity, weight management) that are known to influence diabetes risk
 
-If information is missing, do NOT speculate.
+If information is missing, do NOT speculate. Stay strictly within the provided data.
 """
 
-def build_user_prompt(reasoning: dict) -> str:
+def build_user_prompt(reasoning: dict, patient_data: dict) -> str:
     return f"""
-Using the following structured risk assessment data, write a short clinician-friendly explanation.
+Using the following structured risk assessment data and patient inputs, write a clinician-friendly explanation.
 
-Risk Assessment (GROUND TRUTH):
-- Risk Level       : {reasoning.get("risk_level")}
-- Confidence       : {reasoning.get("confidence")}
-- Pattern Detected : {reasoning.get("pattern_detected")}
-- Counterfactual   : {reasoning.get("counterfactual")}
-- Top Factors      : {json.dumps(reasoning.get("top_factors", []), indent=2)}
-based on the patient's input data and the model's analysis elaborate it upto 10-15 sentenses in a clear and neutral tone, 
--within the 10-15 lines tell some lifestyle habits that affect his disease with misinformation.
-Do not introduce new information. Stay within the data above.
+Patient Input Data:
+- Pregnancies       : {patient_data.get("pregnancies")}
+- Glucose Level     : {patient_data.get("glucose")} mg/dL
+- Blood Pressure    : {patient_data.get("bloodPressure")} mm Hg
+- Skin Thickness    : {patient_data.get("skinThickness")} mm
+- Insulin           : {patient_data.get("insulin")} μU/mL
+- BMI               : {patient_data.get("bmi")} kg/m²
+- Diabetes Pedigree : {patient_data.get("diabetesPedigree")}
+- Age               : {patient_data.get("age")} years
+
+Risk Assessment (MODEL OUTPUT):
+- Risk Level        : {reasoning.get("risk_level")}
+- Confidence        : {reasoning.get("confidence")}
+- Pattern Detected  : {reasoning.get("pattern_detected")}
+- Counterfactual    : {reasoning.get("counterfactual")}
+- Top Factors       : {json.dumps(reasoning.get("top_factors", []), indent=2)}
+
+Based on all the above data, write a 10-15 sentence explanation for the clinician.
+Explain the risk level, reference the key contributing factors, and mention evidence-based lifestyle habits
+(such as diet, exercise, and weight management) that are known to affect diabetes risk.
+Do not introduce any information not present in the data above.
 """
 
-def generate_explanation(reasoning: dict) -> str:
-    if genai_model is None:
-        return "LLM explanation unavailable — check GEMINI_API_KEY in app/.env"
-    try:
-        prompt = f"{SYSTEM_PROMPT}\n\n{build_user_prompt(reasoning)}"
-        response = genai_model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        traceback.print_exc()
-        error_msg = str(e)
-        # Check for invalid API key
-        if "API key not valid" in error_msg or "API_KEY_INVALID" in error_msg:
-            print(f"[Gemini Error] Invalid API key - LLM explanations disabled")
-            return "LLM explanation unavailable — check GEMINI_API_KEY in app/.env"
-        print(f"[Gemini Error] {e}")
-        return f"AI explanation unavailable. ({type(e).__name__}: {e})"
+def generate_explanation(reasoning: dict, patient_data: dict) -> str:
+    if genai_client is None:
+        return "LLM explanation unavailable — check GEMINI_API_KEY in .env"
+
+    import time
+    prompt = f"{SYSTEM_PROMPT}\n\n{build_user_prompt(reasoning, patient_data)}"
+    last_error = None
+
+    for attempt in range(3):
+        try:
+            response = genai_client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.2)
+            )
+            return response.text
+        except Exception as e:
+            last_error = e
+            error_msg = str(e)
+            if "API key not valid" in error_msg or "API_KEY_INVALID" in error_msg:
+                print("[Gemini Error] Invalid API key")
+                return "LLM explanation unavailable — check GEMINI_API_KEY in .env"
+            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                wait = 2 ** attempt
+                print(f"[Gemini] Rate limited, retrying in {wait}s (attempt {attempt+1}/3)")
+                time.sleep(wait)
+                continue
+            traceback.print_exc()
+            print(f"[Gemini Error] {e}")
+            return f"AI explanation unavailable. ({type(e).__name__}: {e})"
+
+    print(f"[Gemini] All retries exhausted: {last_error}")
+    return "AI explanation temporarily unavailable due to API rate limits. The risk assessment above is still valid."
 
 # ─────────────────────────────────────────────────────────────
 # Helper functions
@@ -197,10 +212,6 @@ def build_reasoning_json(model_output: dict, input_data: dict) -> dict:
 # Routes
 # ─────────────────────────────────────────────────────────────
 
-@app.get("/")
-def health():
-    return {"message": "Diabetes model API is running"}
-
 @app.post("/predict")
 def predict(data: PredictRequest):
 
@@ -241,8 +252,13 @@ def predict(data: PredictRequest):
         "riskPercentage": risk_percentage,
         "shapValues": shap_values
     }
+
     patient_input = {
+        "pregnancies": data.pregnancies,
         "glucose": data.glucose,
+        "bloodPressure": data.bloodPressure,
+        "skinThickness": data.skinThickness,
+        "insulin": data.insulin,
         "bmi": data.bmi,
         "diabetesPedigree": data.diabetesPedigree,
         "age": data.age
@@ -253,7 +269,8 @@ def predict(data: PredictRequest):
         input_data=patient_input
     )
 
-    explanation = generate_explanation(reasoning)
+    # Pass full patient data into the LLM prompt
+    explanation = generate_explanation(reasoning, patient_input)
 
     return {
         "riskProbability": round(float(probability), 3),
