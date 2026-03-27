@@ -29,13 +29,14 @@ const Chatbot = () => {
     setIsLoading(true);
 
     try {
-      const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/health-chat`;
+      // Point to local Python backend instead of Supabase Edge Function
+      const CHAT_URL = "http://localhost:8000/chat";
 
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          // No Supabase auth needed for local backend
         },
         body: JSON.stringify({
           messages: [...messages, userMsg],
@@ -47,8 +48,13 @@ const Chatbot = () => {
         }),
       });
 
-      if (!resp.ok || !resp.body) {
-        throw new Error("Stream failed");
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => null);
+        throw new Error(errorData?.error || "Server error");
+      }
+
+      if (!resp.body) {
+        throw new Error("No response body received");
       }
 
       const reader = resp.body.getReader();
@@ -96,11 +102,11 @@ const Chatbot = () => {
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, I encountered an error. Please try again." },
+        { role: "assistant", content: `**Error:** ${err.message || "I encountered an error. Please contact support if this persists."}` },
       ]);
     } finally {
       setIsLoading(false);

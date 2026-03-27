@@ -1,10 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import List, Optional
 import joblib
 import numpy as np
 import os
 import json
+import time
 import traceback
 from google import genai
 from google.genai import types
@@ -64,6 +67,19 @@ class PredictRequest(BaseModel):
     bmi: float
     diabetesPedigree: float
     age: float
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatContext(BaseModel):
+    name: Optional[str] = None
+    bloodType: Optional[str] = None
+    allergies: Optional[List[str]] = None
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    patientContext: ChatContext
 
 # ─────────────────────────────────────────────────────────────
 # AI / LLM Setup
@@ -282,3 +298,74 @@ def predict(data: PredictRequest):
         "counterfactual": reasoning["counterfactual"],
         "explanation": explanation
     }
+
+# ─────────────────────────────────────────────────────────────
+# Chat Bot Endpoint
+# ─────────────────────────────────────────────────────────────
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    """
+    Handle Chatbot requests using Gemini API directly with the local key.
+    """
+    try:
+        doctor_prompt = f"""You are a professional, empathetic, and knowledgeable Physician Assistant AI integrated into MediLocker.
+Your goal is to provide health information while maintaining strict medical safety guardrails.
+
+PERSONA:
+- Respond like a compassionate doctor: "I understand your concern...", "Based on your clinical context...".
+- Be professional, clear, and evidence-based.
+
+GUARDRAILS:
+1. MANDATORY DISCLAIMER: Start every new conversation or serious query by stating you are an AI assistant, not a replacement for a human doctor.
+2. EMERGENCY: If the user mentions chest pain, severe bleeding, difficulty breathing, or other emergencies, urge them to call emergency services (911/112) IMMEDIATELY.
+3. NO DOSAGES: Never prescribe specific dosages for prescription medications.
+4. RECOMMENDATION: Always suggest consulting a human physician for a definitive diagnosis or treatment plan.
+5. CONTEXTUAL: Use the provided patient data to tailor your advice but remind them that this is for informational purposes.
+
+Patient Context:
+- Name: {request.patientContext.name or "Unknown"}
+- Blood Type: {request.patientContext.bloodType or "Unknown"}
+- Known Allergies: {", ".join(request.patientContext.allergies or []) if request.patientContext.allergies else "None reported"}
+
+Format your responses with clean Markdown (bullet points, bold text)."""
+
+        # Convert to Gemini format
+        contents = [
+            {"role": "user", "parts": [{"text": f"SYSTEM INSTRUCTIONS: {doctor_prompt}"}]}
+        ]
+        for m in request.messages:
+            contents.append({
+                "role": "model" if m.role == "assistant" else "user",
+                "parts": [{"text": m.content}]
+            })
+
+        def stream_generator():
+            try:
+                # Using the direct generate_content stream
+                response = genai_client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=contents,
+                    config=types.GenerateContentConfig(temperature=0.3),
+                )
+                # The google-genai SDK 1.0 doesn't support easy iterators on generate_content sometimes
+                # But here we'll simulate the OpenAI-like stream format for the frontend
+                
+                full_text = response.text
+                # Split text into chunks to simulate streaming for the frontend
+                # (Actual streaming via SDK 1.0 requires a loop)
+                words = full_text.split(" ")
+                for i in range(0, len(words), 5):
+                    chunk = " ".join(words[i:i+5]) + " "
+                    openai_chunk = {"choices": [{"delta": {"content": chunk}}]}
+                    yield f"data: {json.dumps(openai_chunk)}\n\n"
+                
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                yield f'data: {{"error": "{str(e)}"}}\n\n'
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -8,13 +9,13 @@ import {
   MessageCircle,
   User,
   Users,
-  ScanLine,
   LogOut,
   Shield,
-  ShieldCheck,
   Stethoscope,
   Menu,
   X,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import { useState } from "react";
 
 const TopNavbar = () => {
   const { profile, hasRole, signOut, activeRole } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -103,6 +105,16 @@ const TopNavbar = () => {
               {profile?.full_name?.split(" ")[0] || "User"}
             </span>
           </div>
+
+          {/* Dark / Light toggle */}
+          <button
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+
           <Button
             variant="ghost"
             size="sm"

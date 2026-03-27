@@ -1,61 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 @layer base {
+  /* ── Light mode (hospital clean) ───────────────────────── */
   :root {
-    --background: 210 40% 98%;
-    --foreground: 220 20% 15%;
+    /* Base */
+    --background: 210 33% 97%;        /* near-white with cool blue tint */
+    --foreground: 215 28% 17%;        /* deep navy text */
 
+    /* Cards */
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 15%;
+    --card-foreground: 215 28% 17%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 15%;
+    --popover-foreground: 215 28% 17%;
 
-    --primary: 217 91% 60%;
+    /* Primary — trustworthy medical blue */
+    --primary: 210 85% 42%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 214 32% 91%;
-    --secondary-foreground: 220 20% 15%;
+    /* Secondary */
+    --secondary: 210 30% 92%;
+    --secondary-foreground: 215 28% 17%;
 
-    --muted: 214 32% 95%;
-    --muted-foreground: 215 16% 47%;
+    /* Muted */
+    --muted: 210 25% 94%;
+    --muted-foreground: 215 16% 46%;
 
-    --accent: 214 95% 93%;
-    --accent-foreground: 217 91% 40%;
+    /* Accent — teal (clinical) */
+    --accent: 185 70% 90%;
+    --accent-foreground: 185 70% 25%;
 
-    --destructive: 0 72% 51%;
+    /* Destructive */
+    --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
+    /* Border / input */
+    --border: 210 25% 88%;
+    --input: 210 25% 88%;
+    --ring: 210 85% 42%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 220 20% 30%;
-    --sidebar-primary: 217 91% 60%;
+    /* Sidebar */
+    --sidebar-background: 210 40% 98%;
+    --sidebar-foreground: 215 28% 30%;
+    --sidebar-primary: 210 85% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 214 95% 93%;
-    --sidebar-accent-foreground: 217 91% 40%;
-    --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-accent: 185 70% 90%;
+    --sidebar-accent-foreground: 185 70% 25%;
+    --sidebar-border: 210 25% 88%;
+    --sidebar-ring: 210 85% 42%;
 
-    --chart-1: 217 91% 60%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 45 93% 58%;
-    --chart-4: 0 72% 51%;
-    --chart-5: 142 71% 45%;
+    /* Health status */
+    --health-excellent: 142 71% 40%;
+    --health-good: 185 70% 40%;
+    --health-fair: 45 90% 48%;
+    --health-poor: 25 93% 50%;
+    --health-critical: 0 70% 50%;
+  }
 
-    --health-excellent: 142 71% 45%;
-    --health-good: 199 89% 48%;
-    --health-fair: 45 93% 58%;
-    --health-poor: 25 95% 53%;
-    --health-critical: 0 72% 51%;
+  /* ── Dark mode (hospital night / low-eye-strain) ────────── */
+  .dark {
+    /* Base — deep navy, not pitch black (easier on eyes) */
+    --background: 218 28% 10%;
+    --foreground: 210 20% 92%;
+
+    /* Cards */
+    --card: 218 25% 14%;
+    --card-foreground: 210 20% 92%;
+
+    --popover: 218 25% 14%;
+    --popover-foreground: 210 20% 92%;
+
+    /* Primary — lighter medical blue for dark bg */
+    --primary: 210 80% 58%;
+    --primary-foreground: 218 28% 10%;
+
+    /* Secondary */
+    --secondary: 218 22% 20%;
+    --secondary-foreground: 210 20% 92%;
+
+    /* Muted */
+    --muted: 218 22% 18%;
+    --muted-foreground: 215 16% 58%;
+
+    /* Accent — muted teal */
+    --accent: 185 50% 22%;
+    --accent-foreground: 185 60% 75%;
+
+    /* Destructive */
+    --destructive: 0 63% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Border / input */
+    --border: 218 22% 22%;
+    --input: 218 22% 22%;
+    --ring: 210 80% 58%;
+
+    /* Sidebar */
+    --sidebar-background: 218 28% 12%;
+    --sidebar-foreground: 210 20% 80%;
+    --sidebar-primary: 210 80% 58%;
+    --sidebar-primary-foreground: 218 28% 10%;
+    --sidebar-accent: 185 50% 22%;
+    --sidebar-accent-foreground: 185 60% 75%;
+    --sidebar-border: 218 22% 22%;
+    --sidebar-ring: 210 80% 58%;
+
+    /* Health status */
+    --health-excellent: 142 60% 48%;
+    --health-good: 185 60% 48%;
+    --health-fair: 45 85% 55%;
+    --health-poor: 25 90% 55%;
+    --health-critical: 0 65% 58%;
   }
 }
 
@@ -74,14 +135,19 @@
   .glass {
     background: hsl(0 0% 100% / 0.8);
     backdrop-filter: blur(12px);
-    border: 1px solid hsl(214 32% 91%);
+    border: 1px solid hsl(210 25% 88%);
+  }
+
+  .dark .glass {
+    background: hsl(218 25% 14% / 0.85);
+    border: 1px solid hsl(218 22% 22%);
   }
 
   .glow-primary {
-    box-shadow: 0 4px 14px hsl(217 91% 60% / 0.15);
+    box-shadow: 0 4px 14px hsl(210 85% 42% / 0.18);
   }
 
-  .text-glow {
-    /* no glow in light theme */
+  .dark .glow-primary {
+    box-shadow: 0 4px 20px hsl(210 80% 58% / 0.25);
   }
 }

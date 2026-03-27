@@ -13,6 +13,7 @@ import {
   Shield,
   ShieldCheck,
   Stethoscope,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ const AppSidebar = () => {
   const patientLinks = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/records", label: "Records", icon: FileText },
+    { to: "/appointments", label: "Appointments", icon: CalendarDays },
     { to: "/my-predictions", label: "Predictions", icon: Heart },
     { to: "/qr-code", label: "My QR Code", icon: QrCode },
     { to: "/chatbot", label: "AI Assistant", icon: MessageCircle },
@@ -33,6 +35,7 @@ const AppSidebar = () => {
 
   const doctorLinks = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/appointments", label: "Appointments", icon: CalendarDays },
     { to: "/predictions", label: "Predictions", icon: Heart },
     { to: "/patients", label: "Patients", icon: Stethoscope },
     { to: "/scan", label: "Scan QR", icon: ScanLine },
